@@ -4,37 +4,51 @@ mod variant;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
-struct Args {
-    /// Name of the profile variant to use.
-    #[arg(short, long)]
-    name: String,
+#[non_exhaustive]
+enum Commands {
+    #[command(about = "Sets the git profile variant.")]
+    Var {
+        /// The name of the profile to use. e.g. `foo` or `bar` depending on the
+        /// folder the config is in.
+        #[arg(short, long)]
+        name: String,
+        /// Indicates that only the local config will be changed and the global config
+        /// remains untouched.
+        #[arg(short, long, default_value_t = false)]
+        sacred: bool,
+        /// Provides the log of the changes effected without any truncation.
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
 
-    /// Bakes the current profile into the current repository unless
-    /// name is specified.
-    #[arg(short, long)]
-    sacred: bool,
+    #[command(about = "Provides the configured git profile information.")]
+    Whoami {
+        /// Provides all the data found in the git config without any truncation.
+        #[arg(short, long, default_value_t = false)]
+        verbose: bool,
+    },
 }
 
 fn main() {
-    let args = Args::parse();
-
-    if args.sacred {
-        match variant::bake_variant(&args.name) {
-            Ok(()) => {
-                print!("Baked profile {}", args.name);
+    match Commands::parse() {
+        Commands::Whoami { verbose } => match variant::whoami(verbose) {
+            Ok(data) => {
+                println!("{}", String::from_utf8_lossy(&data));
             }
-            Err(err) => {
-                eprint!("Failed to bake profile {}: {}", args.name, err)
+            Err(data) => {
+                eprintln!("{}", String::from_utf8_lossy(&data));
             }
-        }
-    }
-
-    match variant::set_profile(&args.name) {
-        Ok(()) => {
-            print!("Set profile {}", args.name);
-        }
-        Err(err) => {
-            eprint!("Failed to set profile {}: {}", args.name, err)
+        },
+        Commands::Var {
+            name,
+            sacred,
+            verbose,
+        } => {
+            // FIXME
+            println!(
+                "profile with name: {}, sacred: {}, verbose: {}",
+                name, sacred, verbose
+            );
         }
     }
 }
