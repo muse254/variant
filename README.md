@@ -7,7 +7,7 @@ This tool addresses the challenge of managing multiple Git profiles, such as wor
 
 ## Installation
 
-It is important to note that `variant` assumes that you have already have [git](https://git-scm.com/) installed and configured.
+It is important to note that `variant` assumes that you have already have [git](https://git-scm.com/) installed and configured. Also the `ssh-add` command is expected to be available in your PATH, [this is what it does](https://superuser.com/questions/360686/what-exactly-does-ssh-add-do).
 
 ## Usage
 
@@ -25,6 +25,9 @@ It assumes a directory structure that looks like this for the git accounts to be
 |	|	|-- id_rsa.pub
 ```
 
+It's important to note that the name of the folder and the name of the git profile match, in this case `foo` and `bar`. When switching profiles, variant will try to pig the
+server 
+
 When I create a new repository, I can specify which account to use:
 
 ```bash
@@ -40,10 +43,23 @@ cd my-awesome-project
 variant var -n foo --sacred
 ```
 
-## Other
-
 We can also query for information about the profile configured:
 
 ```bash
 variant whoami -v
 ```
+
+## Other
+
+The project is really a wrapper around `git` and the `ssh` commands, so it's not really doing anything special. The selling point is ergonomics.
+
+With aliasing magic, I can do this:
+
+```bash
+alias vf="variant var -n foo"
+alias vb="variant var -n bar"
+vf # Switch to foo
+vb # Switch to bar
+```
+
+With some imagination, switching accounts becomes a breeze.

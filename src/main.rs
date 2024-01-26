@@ -1,5 +1,7 @@
 use clap::Parser;
+use plugins::{Prompt, VariantConfig};
 
+mod plugins;
 mod variant;
 
 #[derive(Parser, Debug)]
@@ -16,10 +18,10 @@ enum Commands {
         /// remains untouched.
         #[arg(short, long, default_value_t = false)]
         sacred: bool,
-        /// Provides the log of the changes effected without any truncation.
-        #[arg(short, long, default_value_t = false)]
-        verbose: bool,
     },
+
+    #[command(about = "Lists all the git profile variants.")]
+    List,
 
     #[command(about = "Provides the configured git profile information.")]
     Whoami {
@@ -30,6 +32,8 @@ enum Commands {
 }
 
 fn main() {
+    let persistance = VariantConfig::init().unwrap();
+
     match Commands::parse() {
         Commands::Whoami { verbose } => match variant::whoami(verbose) {
             Ok(data) => {
@@ -39,16 +43,27 @@ fn main() {
                 eprintln!("{}", String::from_utf8_lossy(&data));
             }
         },
-        Commands::Var {
-            name,
-            sacred,
-            verbose,
-        } => {
-            // FIXME
-            println!(
-                "profile with name: {}, sacred: {}, verbose: {}",
-                name, sacred, verbose
-            );
+
+        Commands::List => match variant::variants() {
+            Ok(variants) => {
+                for variant in variants {
+                    println!("{}", variant.name);
+                }
+            }
+            Err(data) => {
+                eprintln!("{}", String::from_utf8_lossy(&data));
+            }
+        },
+
+        Commands::Var { name, sacred } => {
+            match variant::set_variant(name, persistance, Prompt::plugin, sacred) {
+                Ok(_) => {
+                    println!("Successfully set variant.");
+                }
+                Err(data) => {
+                    eprintln!("{}", String::from_utf8_lossy(&data));
+                }
+            }
         }
     }
 }
