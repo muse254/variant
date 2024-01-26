@@ -148,12 +148,12 @@ fn keys(path: &Path) -> Result<KeyPair, Vec<u8>> {
             }
 
             if name.ends_with(".pub") {
-                if path.join(name.strip_suffix(".pub").unwrap()).exists() {
-                    return Ok((
-                        path.join(name.strip_suffix(".pub").unwrap()),
-                        path.to_path_buf(),
-                    ));
-                }
+                let partner = path
+                    .parent()
+                    .expect("must have parent")
+                    .join(name.strip_suffix(".pub").expect("must have suffix"));
+
+                return Ok((path, partner));
             }
         }
     }
