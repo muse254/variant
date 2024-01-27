@@ -1,9 +1,6 @@
+use std::{io, path::Path, process::Command};
+
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
 
 use crate::plugins::{KeyPair, Metadata, Persist, Variant};
 
@@ -82,7 +79,7 @@ pub fn variants() -> Result<Vec<Variant>, Vec<u8>> {
 pub fn set_variant<Cache: Persist>(
     name: String,
     cache: Cache,
-    provider: fn(String) -> Result<Metadata, Vec<u8>>,
+    provider: &dyn Fn(String) -> Result<Metadata, Vec<u8>>,
     sacred: bool,
 ) -> Result<(), Vec<u8>> {
     let variant = variants()?
@@ -100,7 +97,9 @@ pub fn set_variant<Cache: Persist>(
     }
 
     let register_key = Command::new("ssh-add")
-        .arg(variant.keys.1.as_os_str())
+        .arg(variant.keys.1.to_str().expect("must be valid utf-8"))
+        .stderr(io::stderr())
+        .stdout(io::stdout())
         .output()
         .map_err(|e| e.to_string().as_bytes().to_vec())?;
 
@@ -110,17 +109,36 @@ pub fn set_variant<Cache: Persist>(
 
     let metadata = match cache.read(name.clone())? {
         Some(metadata) => metadata,
-        None => provider(name)?,
+        None => {
+            let data = provider(name)?;
+            cache.write(data.clone())?;
+            data
+        }
     };
 
-    let scope = if sacred { "local" } else { "global" };
-
-    for pair in [("user.name", metadata.name), ("user.email", metadata.email)] {
-        Command::new("git")
-            .args(["config", scope, pair.0, &pair.1])
+    for pair in [
+        ("user.name", metadata.name),
+        ("user.email", metadata.email),
+        (
+            "user.signingkey",
+            String::from(variant.keys.0.to_str().expect("must be valid utf-8")),
+        ),
+    ] {
+        let output = Command::new("git")
+            .arg("config")
+            .arg(if sacred { "--local" } else { "--global" })
+            .arg(pair.0)
+            .arg(pair.1)
             .output()
             .map_err(|e| e.to_string().as_bytes().to_vec())?;
+
+        if !output.status.success() {
+            return Err(output.stdout);
+        }
     }
+
+    // log changes
+    println!("{}\n", String::from_utf8_lossy(&whoami(false)?));
 
     Ok(())
 }

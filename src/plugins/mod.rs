@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
+
+use std::path::PathBuf;
 
 /// Persist represents a persistence layer for the metadata; it can be a file, a database, etc.
 /// The implementation is left to the user.
@@ -11,7 +11,7 @@ pub trait Persist {
 }
 
 /// Metadata represents the git profile metadata.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Metadata {
     // Refers to the fully qualified e.g. like John Doe.
     pub name: String,
@@ -32,7 +32,5 @@ pub struct Variant {
 /// The public key and private key pair, respectively.
 pub type KeyPair = (PathBuf, PathBuf);
 
-mod persist;
-mod prompt;
-pub(crate) use persist::VariantConfig;
-pub(crate) use prompt::Prompt;
+pub mod persist;
+pub mod prompt;
