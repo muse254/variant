@@ -1,6 +1,10 @@
 use clap::Parser;
 
-mod variant;
+mod api;
+mod errors;
+mod plugins;
+use api::{set_variant, variants, whoami};
+use plugins::{persist::VariantConfig, prompt::input_prompt};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -16,10 +20,10 @@ enum Commands {
         /// remains untouched.
         #[arg(short, long, default_value_t = false)]
         sacred: bool,
-        /// Provides the log of the changes effected without any truncation.
-        #[arg(short, long, default_value_t = false)]
-        verbose: bool,
     },
+
+    #[command(about = "Lists all the git profile variants.")]
+    List,
 
     #[command(about = "Provides the configured git profile information.")]
     Whoami {
@@ -31,24 +35,38 @@ enum Commands {
 
 fn main() {
     match Commands::parse() {
-        Commands::Whoami { verbose } => match variant::whoami(verbose) {
+        Commands::Whoami { verbose } => match whoami(verbose) {
             Ok(data) => {
                 println!("{}", String::from_utf8_lossy(&data));
             }
             Err(data) => {
-                eprintln!("{}", String::from_utf8_lossy(&data));
+                eprintln!("{}", data);
             }
         },
-        Commands::Var {
-            name,
-            sacred,
-            verbose,
-        } => {
-            // FIXME
-            println!(
-                "profile with name: {}, sacred: {}, verbose: {}",
-                name, sacred, verbose
-            );
+
+        Commands::List => match variants() {
+            Ok(variants) => {
+                for variant in variants {
+                    println!("{}", variant.name);
+                }
+            }
+            Err(data) => {
+                eprintln!("{}", data);
+            }
+        },
+
+        Commands::Var { name, sacred } => {
+            let persistance =
+                VariantConfig::init().expect("must be able to initialize persistance");
+
+            match set_variant(name, persistance, &input_prompt, sacred) {
+                Ok(_) => {
+                    println!("Successfully set variant.");
+                }
+                Err(data) => {
+                    eprintln!("{}", data);
+                }
+            }
         }
     }
 }
