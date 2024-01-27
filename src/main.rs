@@ -1,7 +1,9 @@
 use clap::Parser;
 
 mod api;
+mod errors;
 mod plugins;
+use api::{set_variant, variants, whoami};
 use plugins::{persist::VariantConfig, prompt::input_prompt};
 
 #[derive(Parser, Debug)]
@@ -33,23 +35,23 @@ enum Commands {
 
 fn main() {
     match Commands::parse() {
-        Commands::Whoami { verbose } => match api::whoami(verbose) {
+        Commands::Whoami { verbose } => match whoami(verbose) {
             Ok(data) => {
                 println!("{}", String::from_utf8_lossy(&data));
             }
             Err(data) => {
-                eprintln!("{}", String::from_utf8_lossy(&data));
+                eprintln!("{}", data);
             }
         },
 
-        Commands::List => match api::variants() {
+        Commands::List => match variants() {
             Ok(variants) => {
                 for variant in variants {
                     println!("{}", variant.name);
                 }
             }
             Err(data) => {
-                eprintln!("{}", String::from_utf8_lossy(&data));
+                eprintln!("{}", data);
             }
         },
 
@@ -57,12 +59,12 @@ fn main() {
             let persistance =
                 VariantConfig::init().expect("must be able to initialize persistance");
 
-            match api::set_variant(name, persistance, &input_prompt, sacred) {
+            match set_variant(name, persistance, &input_prompt, sacred) {
                 Ok(_) => {
                     println!("Successfully set variant.");
                 }
                 Err(data) => {
-                    eprintln!("{}", String::from_utf8_lossy(&data));
+                    eprintln!("{}", data);
                 }
             }
         }

@@ -1,5 +1,7 @@
 use std::{fs::OpenOptions, path::PathBuf};
 
+use crate::errors::VariantError;
+
 use super::{Metadata, Persist};
 
 /// Reads and writes to the local cache file to provide persistent storage.
@@ -10,17 +12,16 @@ pub struct VariantConfig {
 const VARIANT_FILE: &str = ".variant";
 
 impl VariantConfig {
-    pub fn init() -> Result<Self, Vec<u8>> {
+    pub fn init() -> Result<Self, VariantError> {
         let variant_file = home::home_dir()
-            .ok_or_else(|| b"cannot find home directory")?
+            .ok_or_else(|| VariantError::IO("cannot find home directory".into()))?
             .join(VARIANT_FILE);
 
         // making sure the file exists, if not create it
         let _ = OpenOptions::new()
             .write(true)
             .create(true)
-            .open(&variant_file)
-            .map_err(|e| e.to_string().as_bytes().to_vec())?;
+            .open(&variant_file)?;
 
         Ok(Self {
             write_path: variant_file,
@@ -29,13 +30,13 @@ impl VariantConfig {
 }
 
 impl Persist for VariantConfig {
-    fn write(&self, metadata: Metadata) -> Result<(), Vec<u8>> {
-        let write_ = |to_file| {
-            let mut file = OpenOptions::new()
-                .write(true)
-                .open(&self.write_path)
-                .map_err(|e| e.to_string().as_bytes().to_vec())?;
-            serde_json::to_writer(&mut file, to_file).map_err(|e| e.to_string().as_bytes().to_vec())
+    fn write(&self, metadata: Metadata) -> Result<(), VariantError> {
+        let write_ = |to_file| -> Result<(), VariantError> {
+            serde_json::to_writer(
+                OpenOptions::new().write(true).open(&self.write_path)?,
+                to_file,
+            )
+            .map_err(|e| e.into())
         };
 
         let mut data = self.read_all()?;
@@ -53,25 +54,21 @@ impl Persist for VariantConfig {
         write_(&data)
     }
 
-    fn read(&self, username: String) -> Result<Option<Metadata>, Vec<u8>> {
+    fn read(&self, username: String) -> Result<Option<Metadata>, VariantError> {
         Ok(self
             .read_all()?
             .into_iter()
             .find(|m| m.username == username))
     }
 
-    fn read_all(&self) -> Result<Vec<Metadata>, Vec<u8>> {
-        match serde_json::from_str::<Vec<Metadata>>(
-            &std::fs::read_to_string(&self.write_path)
-                .map_err(|e| e.to_string().as_bytes().to_vec())?,
-        ) {
+    fn read_all(&self) -> Result<Vec<Metadata>, VariantError> {
+        match serde_json::from_str::<Vec<Metadata>>(&std::fs::read_to_string(&self.write_path)?) {
             Ok(data) => Ok(data),
             Err(e) => {
                 if e.is_eof() {
-                    Ok(Vec::new())
-                } else {
-                    Err(e.to_string().as_bytes().to_vec())
+                    return Ok(Vec::new());
                 }
+                Err(e.into())
             }
         }
     }

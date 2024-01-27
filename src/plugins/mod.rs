@@ -1,13 +1,22 @@
+//! This module contains the plugin logic that can be used to extend the functionality of the
+//! application.
+//! All is optional and custom plugins can be implemented by the user.
+
 use serde::{Deserialize, Serialize};
 
 use std::path::PathBuf;
 
+use crate::errors::VariantError;
+
+pub mod persist;
+pub mod prompt;
+
 /// Persist represents a persistence layer for the metadata; it can be a file, a database, etc.
 /// The implementation is left to the user.
 pub trait Persist {
-    fn write(&self, metadata: Metadata) -> Result<(), Vec<u8>>;
-    fn read(&self, username: String) -> Result<Option<Metadata>, Vec<u8>>;
-    fn read_all(&self) -> Result<Vec<Metadata>, Vec<u8>>;
+    fn write(&self, metadata: Metadata) -> Result<(), VariantError>;
+    fn read(&self, username: String) -> Result<Option<Metadata>, VariantError>;
+    fn read_all(&self) -> Result<Vec<Metadata>, VariantError>;
 }
 
 /// Metadata represents the git profile metadata.
@@ -31,6 +40,3 @@ pub struct Variant {
 
 /// The public key and private key pair, respectively.
 pub type KeyPair = (PathBuf, PathBuf);
-
-pub mod persist;
-pub mod prompt;

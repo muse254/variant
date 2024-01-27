@@ -5,9 +5,11 @@ This tool addresses the challenge of managing multiple Git profiles, such as wor
 
 </div>
 
+>**It's important to note that the process is not atomic, if something fails in the middle of the process, you might end up with a broken configuration. I'm working on a way to make this process more robust.**
+
 ## Installation
 
-It is important to note that `variant` assumes that you have already have [git](https://git-scm.com/) installed and configured. Also the `ssh-add` command is expected to be available in your PATH, [this is what it does](https://superuser.com/questions/360686/what-exactly-does-ssh-add-do).
+`variant` assumes that you have already have [git](https://git-scm.com/) installed and configured. Also the `ssh-add` command is expected to be available in your PATH, [this is what it does](https://superuser.com/questions/360686/what-exactly-does-ssh-add-do).
 
 ## Usage
 
@@ -50,8 +52,6 @@ variant whoami -v
 ```
 
 ## Other
-
->**It's important to note that the process is not atomic, if something fails in the middle of the process, you might end up with a broken configuration. I'm working on a way to make this process more robust.**
 
 The project is really a wrapper around `git` and the `ssh` commands, so it's not doing anything special. The selling point is ergonomics.
 
