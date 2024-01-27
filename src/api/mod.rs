@@ -7,7 +7,7 @@ use crate::plugins::{KeyPair, Metadata, Persist, Variant};
 /// whoami returns the git profile information for the current configuration.
 pub fn whoami(verbose: bool) -> Result<Vec<u8>, Vec<u8>> {
     let data = Command::new("git")
-        .args(["config", "--list"])
+        .args(["config", "--global", "--list"])
         .output()
         .map_err(|e| e.to_string().as_bytes().to_vec())?;
 
@@ -82,11 +82,6 @@ pub fn set_variant<Cache: Persist>(
     provider: &dyn Fn(String) -> Result<Metadata, Vec<u8>>,
     sacred: bool,
 ) -> Result<(), Vec<u8>> {
-    let variant = variants()?
-        .into_iter()
-        .find(|v| v.name == name)
-        .ok_or_else(|| b"cannot find variant".to_vec())?;
-
     let start_agent = Command::new("ssh-agent")
         .arg("-s")
         .output()
@@ -94,6 +89,21 @@ pub fn set_variant<Cache: Persist>(
 
     if !start_agent.status.success() {
         return Err(start_agent.stdout);
+    }
+
+    let variant = variants()?
+        .into_iter()
+        .find(|v| v.name == name)
+        .ok_or_else(|| b"cannot find variant".to_vec())?;
+
+    let clear_identities = Command::new("ssh-add")
+        .arg("-D")
+        .stdout(io::stdout())
+        .output()
+        .expect("must be able to clear keys");
+
+    if !clear_identities.status.success() {
+        return Err(clear_identities.stdout);
     }
 
     let register_key = Command::new("ssh-add")

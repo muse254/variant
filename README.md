@@ -51,6 +51,8 @@ variant whoami -v
 
 ## Other
 
+>**It's important to note that the process is not atomic, if something fails in the middle of the process, you might end up with a broken configuration. I'm working on a way to make this process more robust.**
+
 The project is really a wrapper around `git` and the `ssh` commands, so it's not doing anything special. The selling point is ergonomics.
 
 With aliasing magic, I can do this:
