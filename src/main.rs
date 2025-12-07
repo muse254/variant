@@ -5,7 +5,9 @@ use clap::Parser;
 mod api;
 mod errors;
 mod plugins;
-use api::{get_git_remote_url, set_variant, variants, whoami};
+use api::{
+    get_current_ssh_profile, get_git_remote_url, set_variant, switch_ssh_keys, variants, whoami,
+};
 use errors::VariantError;
 use plugins::{Persist, persist::VariantConfig, prompt::input_prompt};
 
@@ -182,14 +184,62 @@ fn main() -> ExitCode {
                 }
             }
 
+            let original_ssh_profile = if git_command == "push" {
+                get_current_ssh_profile().ok().flatten()
+            } else {
+                None
+            };
+
+            let target_profile = if git_command == "push" {
+                let project_cache = VariantConfig::init().ok();
+                if let Some(remote_url) = get_git_remote_url().ok().flatten() {
+                    if let Some(cache) = &project_cache {
+                        if let Ok(Some(cached_profile)) = cache.get_project_profile(&remote_url) {
+                            Some(cached_profile)
+                        } else if let Ok(Some(current_profile)) = get_current_profile_username() {
+                            Some(current_profile)
+                        } else {
+                            None
+                        }
+                    } else if let Ok(Some(current_profile)) = get_current_profile_username() {
+                        Some(current_profile)
+                    } else {
+                        None
+                    }
+                } else if let Ok(Some(current_profile)) = get_current_profile_username() {
+                    Some(current_profile)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(profile) = &target_profile
+                && original_ssh_profile.as_ref() != Some(profile)
+                && let Err(e) = switch_ssh_keys(profile.clone())
+            {
+                eprintln!("Warning: Failed to switch SSH keys: {}", e);
+            }
+
             let status = Command::new("git").args(&args).status();
-            match status {
+            let exit_code = match status {
                 Ok(s) => ExitCode::from(s.code().unwrap_or(1) as u8),
                 Err(e) => {
                     eprintln!("Failed to execute git: {}", e);
                     ExitCode::FAILURE
                 }
+            };
+
+            if git_command == "push"
+                && let Some(original) = &original_ssh_profile
+                && target_profile.as_ref() != Some(original)
+                && let Err(e) = switch_ssh_keys(original.clone())
+            {
+                eprintln!("Warning: Failed to restore SSH keys: {}", e);
             }
+
+            exit_code
         }
 
         Commands::Version => {

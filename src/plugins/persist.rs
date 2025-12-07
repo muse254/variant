@@ -78,21 +78,21 @@ impl VariantConfig {
     fn read_cache(&self) -> Result<CacheData, VariantError> {
         let content = std::fs::read_to_string(&self.write_path)?;
         match serde_json::from_str::<CacheData>(&content) {
-            Ok(data) => Ok(data),
-            Err(e) => {
-                if e.is_eof() {
-                    Ok(CacheData::default())
-                } else {
-                    let profiles: Result<Vec<Metadata>, _> = serde_json::from_str(&content);
-                    match profiles {
-                        Ok(profiles) => Ok(CacheData {
-                            profiles,
-                            projects: Vec::new(),
-                        }),
-                        Err(_) => Ok(CacheData::default()),
-                    }
+            Ok(data) => return Ok(data),
+            Err(err) => {
+                if err.is_eof() {
+                    return Ok(CacheData::default());
                 }
             }
+        };
+
+        let profiles: Result<Vec<Metadata>, _> = serde_json::from_str(&content);
+        match profiles {
+            Ok(profiles) => Ok(CacheData {
+                profiles,
+                projects: Vec::new(),
+            }),
+            Err(_) => Ok(CacheData::default()),
         }
     }
 

@@ -203,6 +203,87 @@ pub fn set_variant<Cache: Persist>(
     Ok(())
 }
 
+/// Switches SSH keys to the specified profile without changing git config.
+pub fn switch_ssh_keys(profile_name: String) -> Result<(), VariantError> {
+    let variant = variants()?
+        .into_iter()
+        .find(|v| v.name == profile_name)
+        .ok_or_else(|| VariantError::System("cannot find variant".into()))?;
+
+    let clear_identities = Command::new("ssh-add")
+        .arg("-D")
+        .stdout(io::stdout())
+        .output()
+        .map_err(|e| VariantError::Shell(e.to_string()))?;
+
+    if !clear_identities.status.success() {
+        return Err(VariantError::Shell(
+            String::from_utf8_lossy(&clear_identities.stdout).into(),
+        ));
+    }
+
+    let register_key = Command::new("ssh-add")
+        .arg(variant.keys.1.to_str().expect("must be valid utf-8"))
+        .stderr(io::stderr())
+        .stdout(io::stdout())
+        .output()
+        .map_err(|e| VariantError::Shell(e.to_string()))?;
+
+    if !register_key.status.success() {
+        return Err(VariantError::Shell(
+            String::from_utf8_lossy(&register_key.stdout).into(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Gets the currently loaded SSH keys by checking ssh-add -l output.
+/// Returns the profile name if a matching key is found, None otherwise.
+pub fn get_current_ssh_profile() -> Result<Option<String>, VariantError> {
+    let output = Command::new("ssh-add")
+        .arg("-l")
+        .output()
+        .map_err(|e| VariantError::Shell(e.to_string()))?;
+
+    if !output.status.success() || output.stdout.is_empty() {
+        return Ok(None);
+    }
+
+    let loaded_fingerprints = String::from_utf8_lossy(&output.stdout);
+    let all_variants = variants()?;
+
+    for variant in all_variants {
+        let key_fingerprint_output = Command::new("ssh-keygen")
+            .args([
+                "-E",
+                "md5",
+                "-lf",
+                variant.keys.1.to_str().expect("must be valid utf-8"),
+            ])
+            .output()
+            .map_err(|e| VariantError::Shell(e.to_string()))?;
+
+        if key_fingerprint_output.status.success() {
+            let fingerprint_line = String::from_utf8_lossy(&key_fingerprint_output.stdout);
+            let fingerprint = fingerprint_line
+                .split_whitespace()
+                .nth(1)
+                .unwrap_or("")
+                .trim()
+                .strip_prefix("MD5:")
+                .unwrap_or("")
+                .trim();
+
+            if !fingerprint.is_empty() && loaded_fingerprints.contains(fingerprint) {
+                return Ok(Some(variant.name));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 /// keys returns the public key and private key pair, respectively.
 fn keys(path: &Path) -> Result<KeyPair, VariantError> {
     // the algorithm is rudimentary, works for now and there's no need to over-engineer it:
