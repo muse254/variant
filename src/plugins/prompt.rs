@@ -9,7 +9,7 @@ pub fn input_prompt(username: String) -> Result<Metadata, VariantError> {
             Ok(n) => n,
             Err(e) => return Err(VariantError::IO(e.to_string())),
         },
-        email: match Text::new("git metadata to set in config?").prompt() {
+        email: match Text::new("git metadata email to set in config?").prompt() {
             Ok(e) => e,
             Err(e) => return Err(VariantError::IO(e.to_string())),
         },

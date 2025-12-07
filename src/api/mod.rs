@@ -5,34 +5,52 @@ use std::{io, path::Path, process::Command};
 use anyhow::Result;
 
 use crate::errors::VariantError;
+use crate::plugins::persist::VariantConfig;
 use crate::plugins::{KeyPair, Metadata, Persist, Variant};
 
 /// whoami returns the git profile information for the current configuration.
 pub fn whoami(verbose: bool) -> Result<Vec<u8>, VariantError> {
-    let data = Command::new("git")
-        .args(["config", "--global", "--list"])
-        .output()?;
-
-    if !data.status.success() {
-        return Err(VariantError::Shell(
-            String::from_utf8_lossy(&data.stdout).into(),
-        ));
-    }
+    let is_repo_cached = || -> bool {
+        if let Ok(Some(remote_url)) = get_git_remote_url()
+            && let Ok(project_cache) = VariantConfig::init()
+        {
+            return project_cache.get_project_profile(&remote_url).is_ok();
+        }
+        false
+    };
 
     if verbose {
+        let data = Command::new("git").args(["config", "--list"]).output()?;
+
+        if !data.status.success() {
+            return Err(VariantError::Shell(
+                String::from_utf8_lossy(&data.stdout).into(),
+            ));
+        }
+
         return Ok(data.stdout);
     }
 
-    // Only keeping the lines we care about.
-    const KEYS: [&[u8]; 3] = [b"user.name", b"user.email", b"user.signingkey"];
+    const KEYS: [&str; 3] = ["user.name", "user.email", "user.signingkey"];
+    let use_local = is_repo_cached();
+    let config_flag = if use_local { "--local" } else { "--global" };
 
     let mut truncated = Vec::new();
-    for line in data.stdout.split(|&c| c == b'\n') {
-        for key in KEYS.iter() {
-            if line.starts_with(key) {
+    let mut first = true;
+    for key in KEYS.iter() {
+        let output = Command::new("git")
+            .args(["config", config_flag, "--get", key])
+            .output()?;
+
+        if output.status.success() && !output.stdout.is_empty() {
+            if !first {
                 truncated.extend_from_slice(b"\n");
-                truncated.extend_from_slice(line);
             }
+            truncated.extend_from_slice(key.as_bytes());
+            truncated.extend_from_slice(b"=");
+            let value = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+            truncated.extend_from_slice(value);
+            first = false;
         }
     }
 
@@ -70,8 +88,26 @@ pub fn variants() -> Result<Vec<Variant>, VariantError> {
     Ok(variants)
 }
 
+pub fn get_git_remote_url() -> Result<Option<String>, VariantError> {
+    let output = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .output()?;
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if url.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(url))
+    }
+}
+
 /// Sets the git profile variant. If sacred is true, then only the local config
 /// will be changed and the global config remains untouched; the inverse is true otherwise.
+/// When sacred is true, the project will be cached and tied to this profile.
 /// The name must be the name of the profile to use. e.g. `foo` or `bar` depending on the
 /// folder the config is in.
 ///
@@ -122,11 +158,22 @@ pub fn set_variant<Cache: Persist>(
     let metadata = match cache.read(name.clone())? {
         Some(metadata) => metadata,
         None => {
-            let data = provider(name)?;
+            let data = provider(name.clone())?;
             cache.write(data.clone())?;
             data
         }
     };
+
+    if let Some(remote_url) = get_git_remote_url()?
+        && sacred
+        && let Ok(project_cache) = VariantConfig::init()
+    {
+        let _ = project_cache.cache_project(remote_url.clone(), name.clone());
+    } else if sacred {
+        return Err(VariantError::System(
+            "Cannot use --sacred flag: not in a git repository with a remote origin.".into(),
+        ));
+    }
 
     for pair in [
         ("user.name", metadata.name),
@@ -151,7 +198,6 @@ pub fn set_variant<Cache: Persist>(
         }
     }
 
-    // log changes
     println!("{}\n", String::from_utf8_lossy(&whoami(false)?));
 
     Ok(())
