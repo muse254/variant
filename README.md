@@ -11,6 +11,14 @@ This tool addresses the challenge of managing multiple Git profiles, such as wor
 
 `variant` assumes that you have already have [git](https://git-scm.com/) installed and configured. Also the `ssh-add` command is expected to be available in your PATH, [this is what it does](https://superuser.com/questions/360686/what-exactly-does-ssh-add-do).
 
+### Installation with `cargo`
+
+If you already have cargo installed in your system, use these steps.
+
+```sh
+ cargo install --git https://github.com/muse254/variant.git@main
+```
+
 ## Usage
 
 It assumes a directory structure that looks like this for the git accounts to be managed, `foo` and `bar`:
@@ -33,7 +41,7 @@ git server to ensure that changes effectively took place.
 When I create a new repository, I can specify which account to use:
 
 ```bash
-cd my-awesome-project # We navigate to out project directory
+cd my-awesome-project # We navigate to the project directory
 variant var -n foo # We specify which account to use, assuming variant is in PATH
 ```
 
@@ -44,6 +52,8 @@ you can use the `--sacred` flag:
 cd my-awesome-project
 variant var -n foo --sacred
 ```
+
+This will tie the project to the specified profile and use local git configuration.
 
 We can also query for information about the profile configured:
 
