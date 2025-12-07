@@ -108,6 +108,19 @@ fn check_sacred_association() -> Result<(), VariantError> {
     Ok(())
 }
 
+fn get_target_profile_for_push() -> Option<String> {
+    let project_cache = VariantConfig::init().ok();
+
+    if let Some(remote_url) = get_git_remote_url().ok().flatten()
+        && let Some(cache) = &project_cache
+        && let Ok(Some(cached_profile)) = cache.get_project_profile(&remote_url)
+    {
+        return Some(cached_profile);
+    }
+
+    get_current_profile_username().ok().flatten()
+}
+
 fn main() -> ExitCode {
     match Commands::parse() {
         Commands::Whoami { verbose } => match whoami(verbose) {
@@ -191,26 +204,7 @@ fn main() -> ExitCode {
             };
 
             let target_profile = if git_command == "push" {
-                let project_cache = VariantConfig::init().ok();
-                if let Some(remote_url) = get_git_remote_url().ok().flatten() {
-                    if let Some(cache) = &project_cache {
-                        if let Ok(Some(cached_profile)) = cache.get_project_profile(&remote_url) {
-                            Some(cached_profile)
-                        } else if let Ok(Some(current_profile)) = get_current_profile_username() {
-                            Some(current_profile)
-                        } else {
-                            None
-                        }
-                    } else if let Ok(Some(current_profile)) = get_current_profile_username() {
-                        Some(current_profile)
-                    } else {
-                        None
-                    }
-                } else if let Ok(Some(current_profile)) = get_current_profile_username() {
-                    Some(current_profile)
-                } else {
-                    None
-                }
+                get_target_profile_for_push()
             } else {
                 None
             };
