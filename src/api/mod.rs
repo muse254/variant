@@ -78,10 +78,11 @@ pub fn variants() -> Result<Vec<Variant>, VariantError> {
                 .ok_or_else(|| VariantError::IO("invalid path".into()))?
                 .to_string();
 
-            variants.push(Variant {
-                name,
-                keys: keys(&path)?,
-            });
+            // ~/.ssh may hold directories that are not profiles (e.g. OpenSSH 10.1+
+            // creates ~/.ssh/agent for agent sockets); skip anything without a key pair.
+            if let Some(keys) = keys(&path)? {
+                variants.push(Variant { name, keys });
+            }
         }
     }
 
@@ -285,7 +286,7 @@ pub fn get_current_ssh_profile() -> Result<Option<String>, VariantError> {
 }
 
 /// keys returns the public key and private key pair, respectively.
-fn keys(path: &Path) -> Result<KeyPair, VariantError> {
+fn keys(path: &Path) -> Result<Option<KeyPair>, VariantError> {
     // the algorithm is rudimentary, works for now and there's no need to over-engineer it:
     // - no key has the name `config`
     // - the private key and public key have the same name with the latter having a `.pub` extension
@@ -308,10 +309,55 @@ fn keys(path: &Path) -> Result<KeyPair, VariantError> {
                     .expect("must have parent")
                     .join(name.strip_suffix(".pub").expect("must have suffix"));
 
-                return Ok((path, partner));
+                if partner.is_file() {
+                    return Ok(Some((path, partner)));
+                }
             }
         }
     }
 
-    Err(VariantError::IO("cannot find private key".into()))
+    Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keys;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("variant-keys-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_directory_without_a_key_pair_is_not_a_profile() {
+        // OpenSSH 10.1+ keeps agent sockets in ~/.ssh/agent; it must be skipped, not fatal.
+        let dir = scratch("agent");
+        fs::write(dir.join("agent.socket-placeholder"), b"").unwrap();
+        assert!(keys(&dir).unwrap().is_none());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_public_key_without_its_private_key_is_not_a_profile() {
+        let dir = scratch("orphan");
+        fs::write(dir.join("id.pub"), b"").unwrap();
+        assert!(keys(&dir).unwrap().is_none());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_key_pair_is_found() {
+        let dir = scratch("pair");
+        fs::write(dir.join("config"), b"").unwrap();
+        fs::write(dir.join("id"), b"").unwrap();
+        fs::write(dir.join("id.pub"), b"").unwrap();
+        let (public, private) = keys(&dir).unwrap().expect("pair");
+        assert_eq!(public, dir.join("id.pub"));
+        assert_eq!(private, dir.join("id"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }
