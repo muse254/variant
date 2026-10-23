@@ -183,6 +183,14 @@ pub fn set_variant<Cache: Persist>(
             "user.signingkey",
             String::from(variant.keys.0.to_str().expect("must be valid utf-8")),
         ),
+        // ssh-agent is wiped on reboot, so have git pick the key itself.
+        (
+            "core.sshCommand",
+            format!(
+                "ssh -i '{}' -o IdentitiesOnly=yes",
+                variant.keys.1.to_str().expect("must be valid utf-8")
+            ),
+        ),
     ] {
         let output = Command::new("git")
             .arg("config")
